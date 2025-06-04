@@ -200,51 +200,49 @@ export class ARManager {
     this.arHotspots = [];
   }
   
-  update() {
-    if (!this.isActive) return;
-    
-    const session = this.sceneManager.renderer.xr.getSession();
-    const frame = this.sceneManager.renderer.xr.getFrame();
-    
-    if (!this.modelPlaced && frame && session) {
-      // Request hit test source
-      if (!this.hitTestSourceRequested) {
-        this.hitTestSourceRequested = true;
-        
-        session.requestReferenceSpace('local').then((refSpace) => {
-          session.requestHitTestSource({ space: refSpace }).then((source) => {
-            this.hitTestSource = source;
-          }).catch((error) => {
-            console.error('Failed to request hit test source:', error);
-          });
-        }).catch((error) => {
-          console.error('Failed to request viewer reference space:', error);
-        });
+  async update() {
+  if (!this.isActive) return;
 
+  const session = this.sceneManager.renderer.xr.getSession();
+  const frame = this.sceneManager.renderer.xr.getFrame();
+
+  if (!this.modelPlaced && frame && session) {
+    // Request hit test source
+    if (!this.hitTestSourceRequested) {
+      this.hitTestSourceRequested = true;
+
+      try {
+        const refSpace = await session.requestReferenceSpace('local');
+        const source = await session.requestHitTestSource({ space: refSpace });
+        this.hitTestSource = source;
+      } catch (error) {
+        console.error('Failed to request hit test source:', error);
       }
-      
-      // Perform hit test
-      if (this.hitTestSource) {
-        const referenceSpace = this.sceneManager.renderer.xr.getReferenceSpace();
-        
-        if (referenceSpace) {
-          const hitTestResults = frame.getHitTestResults(this.hitTestSource);
-          
-          if (hitTestResults.length > 0) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
-            
-            if (pose) {
-              this.reticle.visible = true;
-              this.reticle.matrix.fromArray(pose.transform.matrix);
-            }
-          } else {
-            this.reticle.visible = false;
+    }
+
+    // Perform hit test
+    if (this.hitTestSource) {
+      const referenceSpace = this.sceneManager.renderer.xr.getReferenceSpace();
+
+      if (referenceSpace) {
+        const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+
+        if (hitTestResults.length > 0) {
+          const hit = hitTestResults[0];
+          const pose = hit.getPose(referenceSpace);
+
+          if (pose) {
+            this.reticle.visible = true;
+            this.reticle.matrix.fromArray(pose.transform.matrix);
           }
+        } else {
+          this.reticle.visible = false;
         }
       }
     }
   }
+}
+
   
   checkARHotspotClick(mouse) {
     if (!this.arModel || this.arHotspots.length === 0) return null;
