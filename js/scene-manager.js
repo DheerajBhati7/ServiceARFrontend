@@ -32,7 +32,8 @@ export class SceneManager {
       antialias: true,
       alpha: true,
       preserveDrawingBuffer: true,
-      powerPreference: "high-performance"
+      powerPreference: "high-performance",
+      xrCompatible: true
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
