@@ -4,6 +4,9 @@ export class ARManager {
   constructor(sceneManager, uiManager) {
     this.sceneManager = sceneManager;
     this.uiManager = uiManager;
+    if (!this.sceneManager.scene) {
+      throw new Error('SceneManager must be initialized before creating ARManager');
+    }
     this.isActive = false;
     this.reticle = null;
     this.hitTestSource = null;
@@ -15,6 +18,9 @@ export class ARManager {
     this.raycaster = new THREE.Raycaster();
     this.xrSession = null;
 
+    this.viewerReferenceSpace = null;  // For hit test
+    this.localReferenceSpace = null;   // For pose / rendering
+
     this.createReticle();
     this.setupEventListeners();
   }
@@ -23,7 +29,7 @@ export class ARManager {
     const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
     const material = new THREE.MeshBasicMaterial({
       color: 0xffffff,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
     });
     this.reticle = new THREE.Mesh(geometry, material);
     this.reticle.visible = false;
@@ -63,20 +69,20 @@ export class ARManager {
 
   async startAR() {
     try {
+      // Request camera permissions explicitly (optional - some browsers auto prompt on session)
       await navigator.mediaDevices.getUserMedia({ video: true });
     } catch (err) {
       alert('Camera access is required for AR. Please grant camera permissions and try again.');
       return;
     }
 
-    const sessionInit = {
-      requiredFeatures: ['local', 'hit-test'],
-      optionalFeatures: ['dom-overlay'],
-      domOverlay: { root: document.body }
-    };
-
     try {
-      this.xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
+      this.xrSession = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['local', 'hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body },
+      });
+
       await this.sceneManager.renderer.xr.setSession(this.xrSession);
 
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
@@ -97,9 +103,24 @@ export class ARManager {
         this.sceneManager.scene.remove(this.arModel);
         this.arModel = null;
       }
-
       this.clearARHotspots();
 
+      // Request reference spaces and hit test source
+      this.xrSession.requestReferenceSpace('viewer').then((refSpace) => {
+        this.viewerReferenceSpace = refSpace;
+        this.xrSession
+          .requestHitTestSource({ space: this.viewerReferenceSpace })
+          .then((source) => {
+            this.hitTestSource = source;
+          })
+          .catch((err) => {
+            console.error('Failed to get hit test source:', err);
+          });
+      });
+
+      this.xrSession.requestReferenceSpace('local').then((refSpace) => {
+        this.localReferenceSpace = refSpace;
+      });
     } catch (e) {
       console.error('Failed to start AR session:', e);
       alert('Failed to start AR session: ' + e.message);
@@ -132,6 +153,9 @@ export class ARManager {
     this.hitTestSourceRequested = false;
     this.hitTestSource = null;
     this.modelPlaced = false;
+
+    this.viewerReferenceSpace = null;
+    this.localReferenceSpace = null;
   }
 
   setupEventListeners() {
@@ -159,13 +183,13 @@ export class ARManager {
   }
 
   addARHotspots() {
-    this.hotspotsData.forEach(hotspotData => {
+    this.hotspotsData.forEach((hotspotData) => {
       const geometry = new THREE.SphereGeometry(0.08, 32, 32);
       const material = new THREE.MeshPhongMaterial({
         color: 0xffff00,
         emissive: 0xffff00,
         emissiveIntensity: 2,
-        shininess: 100
+        shininess: 100,
       });
       const sphere = new THREE.Mesh(geometry, material);
       sphere.position.set(
@@ -180,7 +204,7 @@ export class ARManager {
   }
 
   clearARHotspots() {
-    this.arHotspots.forEach(hotspot => {
+    this.arHotspots.forEach((hotspot) => {
       if (hotspot.parent) {
         hotspot.parent.remove(hotspot);
       }
@@ -194,45 +218,23 @@ export class ARManager {
     const session = this.sceneManager.renderer.xr.getSession();
     const frame = this.sceneManager.renderer.xr.getFrame();
 
-    if (!this.modelPlaced && frame && session) {
-      if (!this.hitTestSourceRequested) {
-        this.hitTestSourceRequested = true;
+    if (!this.modelPlaced && frame && session && this.hitTestSource && this.localReferenceSpace) {
+      const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+      if (hitTestResults.length > 0) {
+        const hit = hitTestResults[0];
+        const pose = hit.getPose(this.localReferenceSpace);
 
-        session.requestReferenceSpace('local').then((refSpace) => {
-          session.requestHitTestSource({
-            space: refSpace,
-            entityTypes: ['plane']
-          }).then((source) => {
-            this.hitTestSource = source;
-          }).catch((error) => {
-            console.error('Failed to request hit test source:', error);
-          });
-        }).catch((error) => {
-          console.error('Failed to request viewer reference space:', error);
-        });
-      }
-
-      if (this.hitTestSource) {
-        const referenceSpace = this.sceneManager.renderer.xr.getReferenceSpace();
-
-        if (referenceSpace) {
-          const hitTestResults = frame.getHitTestResults(this.hitTestSource);
-
-          if (hitTestResults.length > 0) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
-
-                          if (pose) {
-                this.reticle.visible = true;
-                this.reticle.matrix.fromArray(pose.transform.matrix);
-              }
-            } else {
-              this.reticle.visible = false;
-            }
-          }
+        if (pose) {
+          this.reticle.visible = true;
+          this.reticle.matrix.fromArray(pose.transform.matrix);
+        } else {
+          this.reticle.visible = false;
         }
+      } else {
+        this.reticle.visible = false;
       }
     }
+  }
 
   checkARHotspotClick(mouse) {
     if (!this.arModel || this.arHotspots.length === 0) return null;
