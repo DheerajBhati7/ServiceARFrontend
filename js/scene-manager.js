@@ -66,7 +66,7 @@ export class SceneManager {
   
   setupLighting() {
     // Ambient light
-        this.lights.ambient = new THREE.AmbientLight(0xffffff, 0.4);
+    this.lights.ambient = new THREE.AmbientLight(0xffffff, 0.4);
     this.scene.add(this.lights.ambient);
     
     // Main directional light
@@ -128,7 +128,10 @@ export class SceneManager {
   }
   
   update() {
-    this.controls.update();
+    // Only update OrbitControls if NOT in XR session to avoid conflicts
+    if (!this.renderer.xr.isPresenting) {
+      this.controls.update();
+    }
   }
   
   render() {
