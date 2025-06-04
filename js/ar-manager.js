@@ -68,67 +68,59 @@ export class ARManager {
   }
 
   async startAR() {
-    try {
-      // Request camera permissions explicitly (optional - some browsers auto prompt on session)
-      await navigator.mediaDevices.getUserMedia({ video: true });
-    } catch (err) {
-      alert('Camera access is required for AR. Please grant camera permissions and try again.');
-      return;
-    }
-
-    try {
-      this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['local', 'hit-test'],
-        optionalFeatures: ['dom-overlay'],
-        domOverlay: { root: document.body },
-      });
-
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
-      this.xrRefSpace = await this.xrSession.requestReferenceSpace('local');
-      this.xrViewerSpace = await this.xrSession.requestReferenceSpace('viewer');
-
-
-      this.xrSession.addEventListener('end', () => this.onSessionEnd());
-
-      this.isActive = true;
-      this.uiManager.setARMode(true);
-      this.sceneManager.setARMode(true);
-
-      if (this.model) {
-        this.model.scene.visible = false;
-      }
-
-      this.modelPlaced = false;
-      this.hitTestSourceRequested = false;
-      this.reticle.visible = true;
-
-      if (this.arModel) {
-        this.sceneManager.scene.remove(this.arModel);
-        this.arModel = null;
-      }
-      this.clearARHotspots();
-
-      // Request reference spaces and hit test source
-      this.xrSession.requestReferenceSpace('viewer').then((refSpace) => {
-        this.viewerReferenceSpace = refSpace;
-        this.xrSession
-          .requestHitTestSource({ space: this.viewerReferenceSpace })
-          .then((source) => {
-            this.hitTestSource = source;
-          })
-          .catch((err) => {
-            console.error('Failed to get hit test source:', err);
-          });
-      });
-
-      this.xrSession.requestReferenceSpace('local').then((refSpace) => {
-        this.localReferenceSpace = refSpace;
-      });
-    } catch (e) {
-      console.error('Failed to start AR session:', e);
-      alert('Failed to start AR session: ' + e.message);
-    }
+  try {
+    // Request camera permissions
+    await navigator.mediaDevices.getUserMedia({ video: true });
+  } catch (err) {
+    alert('Camera access is required for AR. Please grant camera permissions and try again.');
+    return;
   }
+
+  try {
+    this.xrSession = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['local', 'hit-test'],
+      optionalFeatures: ['dom-overlay'],
+      domOverlay: { root: document.body },
+    });
+
+    await this.sceneManager.renderer.xr.setSession(this.xrSession);
+    this.xrRefSpace = await this.xrSession.requestReferenceSpace('local');
+    this.xrViewerSpace = await this.xrSession.requestReferenceSpace('viewer');
+
+    this.xrSession.addEventListener('select', () => this.onSelect());
+    this.xrSession.addEventListener('end', () => this.onSessionEnd());
+
+    this.isActive = true;
+    this.uiManager.setARMode(true);
+    this.sceneManager.setARMode(true);
+
+    if (this.model) {
+      this.model.scene.visible = false;
+    }
+
+    this.modelPlaced = false;
+    this.hitTestSourceRequested = false;
+    this.reticle.visible = true;
+
+    if (this.arModel) {
+      this.sceneManager.scene.remove(this.arModel);
+      this.arModel = null;
+    }
+    this.clearARHotspots();
+
+    const viewerRefSpace = await this.xrSession.requestReferenceSpace('viewer');
+    this.viewerReferenceSpace = viewerRefSpace;
+
+    const hitTestSource = await this.xrSession.requestHitTestSource({ space: viewerRefSpace });
+    this.hitTestSource = hitTestSource;
+
+    this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
+  } catch (e) {
+    console.error('Failed to start AR session:', e);
+    alert('Failed to start AR session: ' + e.message);
+  }
+}
+
 
   endAR() {
     if (this.xrSession) {
@@ -162,11 +154,14 @@ export class ARManager {
   }
 
   setupEventListeners() {
-    this.sceneManager.renderer.xr.addEventListener('sessionstart', () => {
-      const session = this.sceneManager.renderer.xr.getSession();
+  this.sceneManager.renderer.xr.addEventListener('sessionstart', () => {
+    const session = this.sceneManager.renderer.xr.getSession();
+    if (session) {
       session.addEventListener('select', () => this.onSelect());
-    });
-  }
+    }
+  });
+}
+
 
   onSelect() {
     if (this.modelPlaced || !this.reticle.visible) return;
