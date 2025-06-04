@@ -87,11 +87,11 @@ export class ARManager {
       this.xrSession.addEventListener('select', () => this.onSelect());
 
       this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
-      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+      // this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
 
-      this.hitTestSource = await this.xrSession.requestHitTestSource({
-        space: this.viewerReferenceSpace,
-      });
+      // this.hitTestSource = await this.xrSession.requestHitTestSource({
+      //   space: this.viewerReferenceSpace,
+      // });
 
       this.isActive = true;
       this.uiManager.setARMode(true);
