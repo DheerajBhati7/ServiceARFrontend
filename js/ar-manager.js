@@ -67,7 +67,6 @@ export class ARManager {
 
   async startAR() {
   try {
-    // Request camera permission first
     await navigator.mediaDevices.getUserMedia({ video: true });
   } catch (err) {
     alert('Camera access is required for AR. Please grant permissions and try again.');
@@ -75,62 +74,34 @@ export class ARManager {
   }
 
   try {
-    console.log('Starting AR session...');
-
-    // Request AR session with minimal requirements
     this.xrSession = await navigator.xr.requestSession('immersive-ar', {
       requiredFeatures: ['hit-test']
     });
 
-    console.log('AR session created successfully');
-
-    // IMPORTANT: Set the session on renderer immediately
     await this.sceneManager.renderer.xr.setSession(this.xrSession);
-    console.log('XR session set on renderer');
 
-    // Set up event listeners
     this.xrSession.addEventListener('end', () => this.onSessionEnd());
     this.xrSession.addEventListener('select', () => this.onSelect());
 
-    // Request reference spaces with fallback
-    this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
-    console.log('Viewer reference space obtained');
+    // Get a supported reference space for hit testing and rendering
+    this.viewerReferenceSpace = await getSupportedReferenceSpace(this.xrSession);
+    this.localReferenceSpace = this.viewerReferenceSpace; // Use same for hit test pose
 
-    try {
-      this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
-      console.log('Local reference space obtained');
-    } catch (e) {
-      console.warn('Local reference space not supported, trying bounded-floor');
-      try {
-        this.localReferenceSpace = await this.xrSession.requestReferenceSpace('bounded-floor');
-        console.log('Bounded-floor reference space obtained');
-      } catch (e2) {
-        console.warn('Bounded-floor reference space not supported, falling back to viewer');
-        this.localReferenceSpace = this.viewerReferenceSpace;
-      }
-    }
-
-    // Request hit test source
     this.hitTestSource = await this.xrSession.requestHitTestSource({
       space: this.viewerReferenceSpace
     });
-    console.log('Hit test source created');
 
-    // Update state
     this.isActive = true;
     this.uiManager.setARMode(true);
     this.sceneManager.setARMode(true);
 
-    // Hide the original model
     if (this.model) {
       this.model.scene.visible = false;
     }
 
-    // Reset placement state
     this.modelPlaced = false;
     this.reticle.visible = true;
 
-    // Clear any existing AR model
     if (this.arModel) {
       this.sceneManager.scene.remove(this.arModel);
       this.arModel = null;
@@ -138,21 +109,29 @@ export class ARManager {
 
     this.clearARHotspots();
 
-    console.log('AR session started successfully');
-
-    // Force a render to make sure everything is displaying
     this.sceneManager.render();
 
   } catch (e) {
     console.error('Failed to start AR session:', e);
     alert('Failed to start AR session: ' + e.message);
-
-    // Clean up on failure
     if (this.xrSession) {
       this.xrSession.end();
       this.xrSession = null;
     }
   }
+  async function getSupportedReferenceSpace(session) {
+  const types = ['viewer', 'local', 'bounded-floor'];
+  for (const type of types) {
+    try {
+      const refSpace = await session.requestReferenceSpace(type);
+      console.log(`Reference space '${type}' supported and obtained.`);
+      return refSpace;
+    } catch (e) {
+      console.warn(`Reference space '${type}' not supported.`);
+    }
+  }
+  throw new Error('No supported reference space found.');
+}
 }
 
   endAR() {
