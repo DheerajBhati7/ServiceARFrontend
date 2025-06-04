@@ -86,7 +86,15 @@ export class ARManager {
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
       this.xrSession.addEventListener('select', () => this.onSelect());
 
-      this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
+      try {
+        this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
+        console.log("Got local reference space");
+      } catch (e) {
+        console.error("Failed to get local reference space:", e);
+      }
+
+
+      //this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
       // this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
 
       // this.hitTestSource = await this.xrSession.requestHitTestSource({
