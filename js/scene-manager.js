@@ -10,7 +10,6 @@ export class SceneManager {
     this.controls = null;
     this.lights = {};
     this.helpers = {};
-    this.isARMode = false;
   }
   
   init() {
@@ -28,17 +27,14 @@ export class SceneManager {
     );
     this.camera.position.set(0, 2, 5);
     
-    // Initialize renderer with proper AR settings
+    // Initialize renderer
     this.renderer = new THREE.WebGLRenderer({ 
       antialias: true,
       alpha: true,
       preserveDrawingBuffer: true,
-      powerPreference: "high-performance"
+      powerPreference: "high-performance",
+      xrCompatible: true
     });
-    
-    // CRITICAL: Enable XR before setting other properties
-    this.renderer.xr.enabled = true;
-    
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -46,11 +42,10 @@ export class SceneManager {
     this.renderer.toneMappingExposure = 1.2;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    
-    // IMPORTANT: Don't set xrCompatible here - it can interfere with AR
+    this.renderer.xr.enabled = true;
     document.body.appendChild(this.renderer.domElement);
     
-    // Create environment (only for non-AR mode)
+    // Create environment
     const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     
@@ -151,44 +146,14 @@ export class SceneManager {
   }
   
   setARMode(enabled) {
-    this.isARMode = enabled;
-    
     if (enabled) {
-      // CRITICAL: Set background to null for camera passthrough
       this.scene.background = null;
       this.scene.fog = null;
-      
-      // Remove environment for AR
-      this.scene.environment = null;
-      
-      // Hide helpers
       this.hideHelpers();
-      
-      // Adjust lighting for AR
-      this.lights.ambient.intensity = 0.8;  // Increase ambient for AR
-      this.lights.main.intensity = 0.5;     // Reduce main light
-      
-      // Make sure renderer alpha is enabled
-      this.renderer.setClearColor(0x000000, 0);
-      
     } else {
-      // Restore normal mode
       this.scene.background = new THREE.Color(0xf5f5f5);
       this.scene.fog = new THREE.Fog(0xf5f5f5, 10, 50);
-      
-      // Restore environment
-      const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-      this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-      
-      // Show helpers
       this.showHelpers();
-      
-      // Restore lighting
-      this.lights.ambient.intensity = 0.4;
-      this.lights.main.intensity = 1;
-      
-      // Restore clear color
-      this.renderer.setClearColor(0xf5f5f5, 1);
     }
   }
 }
