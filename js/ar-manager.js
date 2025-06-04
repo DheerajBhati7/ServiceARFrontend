@@ -126,16 +126,18 @@ export class ARManager {
     }
   }
   async function getSupportedReferenceSpace(session) {
-  const types = ['viewer', 'local', 'bounded-floor'];
-  for (const type of types) {
+  const referenceSpaceTypes = ['local', 'bounded-floor', 'viewer'];
+
+  for (const type of referenceSpaceTypes) {
     try {
       const refSpace = await session.requestReferenceSpace(type);
-      console.log(`Reference space '${type}' supported and obtained.`);
+      console.log(`Reference space '${type}' is supported.`);
       return refSpace;
-    } catch (e) {
-      console.warn(`Reference space '${type}' not supported.`);
+    } catch (err) {
+      console.warn(`Reference space '${type}' not supported:`, err);
     }
   }
+
   throw new Error('No supported reference space found.');
 }
 
