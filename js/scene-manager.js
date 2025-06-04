@@ -33,7 +33,8 @@ export class SceneManager {
       antialias: true,
       alpha: true,
       preserveDrawingBuffer: true,
-      powerPreference: "high-performance"
+      powerPreference: "high-performance",
+      xrCompatible: true
     });
     
     // CRITICAL: Enable XR before setting other properties

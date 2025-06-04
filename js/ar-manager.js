@@ -16,7 +16,6 @@ export class ARManager {
     this.hotspotsData = [];
     this.raycaster = new THREE.Raycaster();
     this.xrSession = null;
-
     this.viewerReferenceSpace = null;
     this.localReferenceSpace = null;
 
@@ -49,7 +48,7 @@ export class ARManager {
           this.uiManager.showARError('AR Not Supported');
         }
       } catch (e) {
-        console.error('AR not supported:', e);
+        console.error('AR support check failed:', e);
         this.uiManager.showARError('AR Not Supported');
       }
     } else {
@@ -60,113 +59,80 @@ export class ARManager {
   setupARButton() {
     const arButton = document.getElementById('arButton');
     const exitARButton = document.getElementById('exitARButton');
-
     arButton.addEventListener('click', () => this.startAR());
     exitARButton.addEventListener('click', () => this.endAR());
   }
 
   async startAR() {
-  try {
-    await navigator.mediaDevices.getUserMedia({ video: true });
-  } catch (err) {
-    alert('Camera access is required for AR. Please grant permissions and try again.');
-    return;
-  }
-
-  try {
-    this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test']
-    });
-
-    await this.sceneManager.renderer.xr.setSession(this.xrSession);
-
-    this.xrSession.addEventListener('end', () => this.onSessionEnd());
-    this.xrSession.addEventListener('select', () => this.onSelect());
-
-    // Get a supported reference space for hit testing and rendering
-    this.localReferenceSpace = await getSupportedReferenceSpace(this.xrSession);
-
-    // For hit test source, use 'viewer' space if supported, else fallback to localReferenceSpace
     try {
-      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
-    } catch {
-      this.viewerReferenceSpace = this.localReferenceSpace;
-    }
-
-    this.hitTestSource = await this.xrSession.requestHitTestSource({
-      space: this.viewerReferenceSpace
-    });
-
-    this.isActive = true;
-    this.uiManager.setARMode(true);
-    this.sceneManager.setARMode(true);
-
-    if (this.model) {
-      this.model.scene.visible = false;
-    }
-
-    this.modelPlaced = false;
-    this.reticle.visible = true;
-
-    if (this.arModel) {
-      this.sceneManager.scene.remove(this.arModel);
-      this.arModel = null;
-    }
-
-    this.clearARHotspots();
-
-    this.sceneManager.render();
-
-  } catch (e) {
-    console.error('Failed to start AR session:', e);
-    alert('Failed to start AR session: ' + e.message);
-    if (this.xrSession) {
-      this.xrSession.end();
-      this.xrSession = null;
-    }
-  }
-  async function getSupportedReferenceSpace(session) {
-  const referenceSpaceTypes = ['local', 'bounded-floor', 'viewer'];
-
-  for (const type of referenceSpaceTypes) {
-    try {
-      const refSpace = await session.requestReferenceSpace(type);
-      console.log(`Reference space '${type}' is supported.`);
-      return refSpace;
+      await navigator.mediaDevices.getUserMedia({ video: true });
     } catch (err) {
-      console.warn(`Reference space '${type}' not supported:`, err);
+      alert('Camera access is required for AR. Please grant camera permissions and try again.');
+      return;
+    }
+
+    try {
+      this.xrSession = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test', 'local'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body },
+      });
+
+      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+
+      // ✅ Ensure WebGL is XR compatible and attach baseLayer
+      const gl = this.sceneManager.renderer.getContext();
+      await gl.makeXRCompatible();
+      this.xrSession.updateRenderState({
+        baseLayer: new XRWebGLLayer(this.xrSession, gl),
+      });
+
+      // ✅ Request reference spaces
+      this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
+      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+
+      // ✅ Set up hit test source
+      this.hitTestSource = await this.xrSession.requestHitTestSource({
+        space: this.viewerReferenceSpace,
+      });
+
+      // ✅ Event listeners
+      this.xrSession.addEventListener('end', () => this.onSessionEnd());
+      this.xrSession.addEventListener('select', () => this.onSelect());
+
+      // ✅ AR session ready
+      this.isActive = true;
+      this.uiManager.setARMode(true);
+      this.sceneManager.setARMode(true);
+
+      if (this.model) this.model.scene.visible = false;
+      if (this.arModel) {
+        this.sceneManager.scene.remove(this.arModel);
+        this.arModel = null;
+      }
+
+      this.reticle.visible = true;
+      this.modelPlaced = false;
+      this.clearARHotspots();
+    } catch (e) {
+      console.error('Failed to start AR session:', e);
+      alert('Failed to start AR session: ' + e.message);
     }
   }
-
-  throw new Error('No supported reference space found.');
-}
-
-  
-}
 
   endAR() {
-    if (this.xrSession) {
-      this.xrSession.end();
-    }
+    if (this.xrSession) this.xrSession.end();
   }
 
   onSessionEnd() {
-    console.log('AR session ended');
-    
     this.isActive = false;
     this.xrSession = null;
     this.uiManager.setARMode(false);
     this.sceneManager.setARMode(false);
 
-    // Show the original model
-    if (this.model) {
-      this.model.scene.visible = true;
-    }
-
-    // Hide reticle
+    if (this.model) this.model.scene.visible = true;
     this.reticle.visible = false;
 
-    // Remove AR model
     if (this.arModel) {
       this.sceneManager.scene.remove(this.arModel);
       this.arModel = null;
@@ -180,16 +146,9 @@ export class ARManager {
   }
 
   onSelect() {
-    console.log('AR select event triggered');
-    
-    if (this.modelPlaced || !this.reticle.visible) {
-      console.log('Model already placed or reticle not visible');
-      return;
-    }
+    if (this.modelPlaced || !this.reticle.visible) return;
 
     if (this.model) {
-      console.log('Placing AR model...');
-      
       this.arModel = this.model.scene.clone();
       this.arModel.position.setFromMatrixPosition(this.reticle.matrix);
       this.arModel.scale.set(0.5, 0.5, 0.5);
@@ -200,8 +159,6 @@ export class ARManager {
       this.modelPlaced = true;
       this.uiManager.hideARInstructions();
       this.reticle.visible = false;
-      
-      console.log('AR model placed successfully');
     }
   }
 
@@ -236,30 +193,24 @@ export class ARManager {
   }
 
   update() {
-    if (!this.isActive || !this.xrSession) return;
+    if (!this.isActive) return;
 
+    const session = this.sceneManager.renderer.xr.getSession();
     const frame = this.sceneManager.renderer.xr.getFrame();
-    if (!frame) return;
 
-    // Update hit testing for reticle placement
-    if (!this.modelPlaced && this.hitTestSource && this.localReferenceSpace) {
-      try {
-        const hitTestResults = frame.getHitTestResults(this.hitTestSource);
-        if (hitTestResults.length > 0) {
-          const hit = hitTestResults[0];
-          const pose = hit.getPose(this.localReferenceSpace);
+    if (!this.modelPlaced && frame && session && this.hitTestSource && this.localReferenceSpace) {
+      const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+      if (hitTestResults.length > 0) {
+        const hit = hitTestResults[0];
+        const pose = hit.getPose(this.localReferenceSpace);
 
-          if (pose) {
-            this.reticle.visible = true;
-            this.reticle.matrix.fromArray(pose.transform.matrix);
-          } else {
-            this.reticle.visible = false;
-          }
+        if (pose) {
+          this.reticle.visible = true;
+          this.reticle.matrix.fromArray(pose.transform.matrix);
         } else {
           this.reticle.visible = false;
         }
-      } catch (e) {
-        console.warn('Hit test failed:', e);
+      } else {
         this.reticle.visible = false;
       }
     }
@@ -270,11 +221,7 @@ export class ARManager {
 
     this.raycaster.setFromCamera(mouse, this.sceneManager.camera);
     const intersects = this.raycaster.intersectObjects(this.arHotspots, true);
-
-    if (intersects.length > 0) {
-      return intersects[0].object.userData;
-    }
-    return null;
+    return intersects.length > 0 ? intersects[0].object.userData : null;
   }
 
   isARActive() {
