@@ -155,15 +155,11 @@ export class ARManager {
   }
 
   setupEventListeners() {
-  // Optional safety fallback, not strictly needed anymore
-  this.sceneManager.renderer.xr.addEventListener('sessionstart', () => {
-    const session = this.sceneManager.renderer.xr.getSession();
-    if (session) {
+    this.sceneManager.renderer.xr.addEventListener('sessionstart', () => {
+      const session = this.sceneManager.renderer.xr.getSession();
       session.addEventListener('select', () => this.onSelect());
-    }
-  });
-}
-
+    });
+  }
 
   onSelect() {
     if (this.modelPlaced || !this.reticle.visible) return;
