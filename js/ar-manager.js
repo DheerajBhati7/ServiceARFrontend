@@ -74,29 +74,26 @@ export class ARManager {
     }
 
     try {
-      // Request AR session with more flexible requirements
+      // Use the same session configuration as the working WebXR sample
       this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['local', 'local-floor', 'dom-overlay'],
-        domOverlay: { root: document.body },
+        requiredFeatures: ['hit-test']
       });
 
-      // Set session BEFORE requesting reference spaces
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+      // Important: Set the session on the renderer first
+      this.sceneManager.renderer.xr.setSession(this.xrSession);
 
-      // Attach event listeners early
+      // Set up event listeners
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
       this.xrSession.addEventListener('select', () => this.onSelect());
 
-      // Try different reference spaces in order of preference
-      await this.setupReferenceSpaces();
+      // Request reference spaces - use the exact same approach as the working sample
+      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+      this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
 
-      // Only request hit test source after reference spaces are set up
-      if (this.viewerReferenceSpace) {
-        this.hitTestSource = await this.xrSession.requestHitTestSource({
-          space: this.viewerReferenceSpace,
-        });
-      }
+      // Request hit test source
+      this.hitTestSource = await this.xrSession.requestHitTestSource({
+        space: this.viewerReferenceSpace
+      });
 
       this.isActive = true;
       this.uiManager.setARMode(true);
@@ -115,47 +112,83 @@ export class ARManager {
       }
 
       this.clearARHotspots();
+
+      console.log('AR session started successfully');
     } catch (e) {
       console.error('Failed to start AR session:', e);
-      alert('Failed to start AR session: ' + e.message);
       
-      // Clean up on failure
-      if (this.xrSession) {
-        this.xrSession.end();
+      // Try fallback approach if the standard approach fails
+      if (e.message.includes('reference space') || e.message.includes('refrence space')) {
+        console.log('Trying fallback reference space approach...');
+        await this.startARFallback();
+      } else {
+        alert('Failed to start AR session: ' + e.message);
       }
     }
   }
 
-  async setupReferenceSpaces() {
-    // Try to get reference spaces in order of preference
-    const referenceSpaceTypes = ['local', 'local-floor', 'viewer'];
-    
-    for (const spaceType of referenceSpaceTypes) {
-      try {
-        if (spaceType === 'local' || spaceType === 'local-floor') {
-          this.localReferenceSpace = await this.xrSession.requestReferenceSpace(spaceType);
-          console.log(`Successfully got ${spaceType} reference space`);
-          break;
-        }
-      } catch (e) {
-        console.warn(`Failed to get ${spaceType} reference space:`, e);
-        continue;
-      }
-    }
-
-    // Always try to get viewer reference space
+  async startARFallback() {
     try {
-      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
-      console.log('Successfully got viewer reference space');
-    } catch (e) {
-      console.error('Failed to get viewer reference space:', e);
-      throw new Error('Unable to get required viewer reference space');
-    }
+      // End any existing session
+      if (this.xrSession) {
+        this.xrSession.end();
+        this.xrSession = null;
+      }
 
-    // Fall back to viewer for local if needed
-    if (!this.localReferenceSpace) {
-      console.warn('Using viewer reference space as fallback for local');
-      this.localReferenceSpace = this.viewerReferenceSpace;
+      // Try with minimal requirements - exactly like the working sample
+      this.xrSession = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test']
+      });
+
+      this.sceneManager.renderer.xr.setSession(this.xrSession);
+      
+      this.xrSession.addEventListener('end', () => this.onSessionEnd());
+      this.xrSession.addEventListener('select', () => this.onSelect());
+
+      // Try only viewer space first (most widely supported)
+      try {
+        this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+        console.log('Got viewer reference space');
+      } catch (e) {
+        throw new Error('Cannot get viewer reference space: ' + e.message);
+      }
+
+      // Try local space, but don't fail if it's not available
+      try {
+        this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
+        console.log('Got local reference space');
+      } catch (e) {
+        console.warn('Local reference space not available, using viewer as fallback');
+        this.localReferenceSpace = this.viewerReferenceSpace;
+      }
+
+      // Request hit test source
+      this.hitTestSource = await this.xrSession.requestHitTestSource({
+        space: this.viewerReferenceSpace
+      });
+
+      this.isActive = true;
+      this.uiManager.setARMode(true);
+      this.sceneManager.setARMode(true);
+
+      if (this.model) {
+        this.model.scene.visible = false;
+      }
+
+      this.modelPlaced = false;
+      this.reticle.visible = true;
+
+      if (this.arModel) {
+        this.sceneManager.scene.remove(this.arModel);
+        this.arModel = null;
+      }
+
+      this.clearARHotspots();
+
+      console.log('AR session started with fallback approach');
+    } catch (e) {
+      console.error('Fallback AR session also failed:', e);
+      alert('AR is not supported on this device: ' + e.message);
     }
   }
 
@@ -237,12 +270,12 @@ export class ARManager {
   }
 
   update() {
-    if (!this.isActive) return;
+    if (!this.isActive || !this.xrSession) return;
 
-    const session = this.sceneManager.renderer.xr.getSession();
     const frame = this.sceneManager.renderer.xr.getFrame();
+    if (!frame) return;
 
-    if (!this.modelPlaced && frame && session && this.hitTestSource && this.localReferenceSpace) {
+    if (!this.modelPlaced && this.hitTestSource && this.localReferenceSpace) {
       try {
         const hitTestResults = frame.getHitTestResults(this.hitTestSource);
         if (hitTestResults.length > 0) {
