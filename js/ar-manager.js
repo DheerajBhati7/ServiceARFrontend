@@ -211,7 +211,7 @@ export class ARManager {
       if (!this.hitTestSourceRequested) {
         this.hitTestSourceRequested = true;
         
-session.requestReferenceSpace('local').then((refSpace) => {
+        session.requestReferenceSpace('local').then((refSpace) => {
           session.requestHitTestSource({ space: refSpace }).then((source) => {
             this.hitTestSource = source;
           }).catch((error) => {
@@ -220,6 +220,7 @@ session.requestReferenceSpace('local').then((refSpace) => {
         }).catch((error) => {
           console.error('Failed to request viewer reference space:', error);
         });
+
       }
       
       // Perform hit test
