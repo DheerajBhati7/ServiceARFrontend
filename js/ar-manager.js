@@ -57,7 +57,7 @@ export class ARManager {
   }
 
   setupARButton() {
-    //const arButton = document.getElementById('arButton');
+    const arButton = document.getElementById('arButton');
     const exitARButton = document.getElementById('exitARButton');
     arButton.addEventListener('click', () => this.startAR());
     exitARButton.addEventListener('click', () => this.endAR());

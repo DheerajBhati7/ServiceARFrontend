@@ -74,7 +74,7 @@ async function init() {
     }
     
     // Initialize AR if supported
-    await arManager.init(model, filteredHotspots.length > 0 ? filteredHotspots : []);
+    //await arManager.init(model, filteredHotspots.length > 0 ? filteredHotspots : []);
     
     // Set up interaction handlers
     setupInteractions();
