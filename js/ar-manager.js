@@ -74,32 +74,29 @@ export class ARManager {
     }
 
     try {
+      // Request AR session with more flexible requirements
       this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test', 'local'],
-        optionalFeatures: ['dom-overlay'],
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['local', 'local-floor', 'dom-overlay'],
         domOverlay: { root: document.body },
       });
 
+      // Set session BEFORE requesting reference spaces
       await this.sceneManager.renderer.xr.setSession(this.xrSession);
 
       // Attach event listeners early
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
       this.xrSession.addEventListener('select', () => this.onSelect());
 
-      try {
-        this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
-        console.log("Got local reference space");
-      } catch (e) {
-        console.error("Failed to get local reference space:", e);
+      // Try different reference spaces in order of preference
+      await this.setupReferenceSpaces();
+
+      // Only request hit test source after reference spaces are set up
+      if (this.viewerReferenceSpace) {
+        this.hitTestSource = await this.xrSession.requestHitTestSource({
+          space: this.viewerReferenceSpace,
+        });
       }
-
-
-      //this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
-      // this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
-
-      // this.hitTestSource = await this.xrSession.requestHitTestSource({
-      //   space: this.viewerReferenceSpace,
-      // });
 
       this.isActive = true;
       this.uiManager.setARMode(true);
@@ -121,6 +118,44 @@ export class ARManager {
     } catch (e) {
       console.error('Failed to start AR session:', e);
       alert('Failed to start AR session: ' + e.message);
+      
+      // Clean up on failure
+      if (this.xrSession) {
+        this.xrSession.end();
+      }
+    }
+  }
+
+  async setupReferenceSpaces() {
+    // Try to get reference spaces in order of preference
+    const referenceSpaceTypes = ['local', 'local-floor', 'viewer'];
+    
+    for (const spaceType of referenceSpaceTypes) {
+      try {
+        if (spaceType === 'local' || spaceType === 'local-floor') {
+          this.localReferenceSpace = await this.xrSession.requestReferenceSpace(spaceType);
+          console.log(`Successfully got ${spaceType} reference space`);
+          break;
+        }
+      } catch (e) {
+        console.warn(`Failed to get ${spaceType} reference space:`, e);
+        continue;
+      }
+    }
+
+    // Always try to get viewer reference space
+    try {
+      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+      console.log('Successfully got viewer reference space');
+    } catch (e) {
+      console.error('Failed to get viewer reference space:', e);
+      throw new Error('Unable to get required viewer reference space');
+    }
+
+    // Fall back to viewer for local if needed
+    if (!this.localReferenceSpace) {
+      console.warn('Using viewer reference space as fallback for local');
+      this.localReferenceSpace = this.viewerReferenceSpace;
     }
   }
 
@@ -208,18 +243,23 @@ export class ARManager {
     const frame = this.sceneManager.renderer.xr.getFrame();
 
     if (!this.modelPlaced && frame && session && this.hitTestSource && this.localReferenceSpace) {
-      const hitTestResults = frame.getHitTestResults(this.hitTestSource);
-      if (hitTestResults.length > 0) {
-        const hit = hitTestResults[0];
-        const pose = hit.getPose(this.localReferenceSpace);
+      try {
+        const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+        if (hitTestResults.length > 0) {
+          const hit = hitTestResults[0];
+          const pose = hit.getPose(this.localReferenceSpace);
 
-        if (pose) {
-          this.reticle.visible = true;
-          this.reticle.matrix.fromArray(pose.transform.matrix);
+          if (pose) {
+            this.reticle.visible = true;
+            this.reticle.matrix.fromArray(pose.transform.matrix);
+          } else {
+            this.reticle.visible = false;
+          }
         } else {
           this.reticle.visible = false;
         }
-      } else {
+      } catch (e) {
+        console.warn('Hit test failed:', e);
         this.reticle.visible = false;
       }
     }
