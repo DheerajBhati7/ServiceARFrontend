@@ -35,6 +35,8 @@ export class UIManager {
     this.hideHotspotInfo();
     this.hideTooltip();
     
+    document.getElementById('arButton').style.display = 'block';
+
     // Add close button to hotspot info if it doesn't exist
     if (this.elements.hotspotInfo && !this.elements.hotspotInfo.querySelector('.close-button')) {
       const closeButton = document.createElement('button');
