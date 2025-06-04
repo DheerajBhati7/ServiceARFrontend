@@ -74,8 +74,8 @@ async function init() {
     }
     
     // Initialize AR if supported
-    //await arManager.init(model, filteredHotspots.length > 0 ? filteredHotspots : []);
-    uiManager.showARButton();
+    await arManager.init(model, filteredHotspots.length > 0 ? filteredHotspots : []);
+    //uiManager.showARButton();
     
     // Set up interaction handlers
     setupInteractions();
@@ -158,22 +158,5 @@ function animate() {
   sceneManager.render();
   sceneManager.renderer.setAnimationLoop(animate);
 }
-
-// TEMP: Just test camera feed on AR button click (not real WebXR yet)
-document.getElementById('arButton')?.addEventListener('click', async () => {
-  try {
-    console.log('AR Button clicked: requesting camera feed only...');
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' } // rear camera
-    });
-    const video = document.getElementById('cameraFeed');
-    video.srcObject = stream;
-    video.style.display = 'block';
-    console.log('Camera stream started');
-  } catch (err) {
-    console.error('Failed to access camera:', err);
-    alert('Camera permission denied or unavailable.');
-  }
-});
 // Start the application
 init();
