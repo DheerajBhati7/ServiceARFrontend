@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Three.js GLTFLoader with Hotspots and AR</title>
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- UI Elements -->
+  <div id="loaderContainer"><div id="progressBar"></div></div>
+  <div id="errorPanel"></div>
+  <button id="arButton">View in AR</button>
+  <button id="exitARButton">Exit AR</button>
+  <div id="arInstructions">
+    <h3>AR Mode</h3>
+    <p>Move your device to scan the floor</p>
+    <p>Tap to place the model</p>
+  </div>
+  <div id="hotspotInfo">
+    <h3 id="hotspotName"></h3>
+    <p id="hotspotDescription"></p>
+    <div id="videoLinks"></div>
+  </div>
+  <div id="tooltip"></div>
+
+  <!-- Main Script -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
