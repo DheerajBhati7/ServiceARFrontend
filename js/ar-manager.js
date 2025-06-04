@@ -83,13 +83,18 @@ export class ARManager {
       domOverlay: { root: document.body },
     });
 
+    // ✅ Use the correct session object
     await this.sceneManager.renderer.xr.setSession(this.xrSession);
+
+    // ✅ Store reference spaces
     this.xrRefSpace = await this.xrSession.requestReferenceSpace('local');
     this.xrViewerSpace = await this.xrSession.requestReferenceSpace('viewer');
 
+    // ✅ Add 'select' event directly to the stored session
     this.xrSession.addEventListener('select', () => this.onSelect());
     this.xrSession.addEventListener('end', () => this.onSessionEnd());
 
+    // ✅ Update states
     this.isActive = true;
     this.uiManager.setARMode(true);
     this.sceneManager.setARMode(true);
@@ -108,6 +113,7 @@ export class ARManager {
     }
     this.clearARHotspots();
 
+    // ✅ Setup hit test source
     const viewerRefSpace = await this.xrSession.requestReferenceSpace('viewer');
     this.viewerReferenceSpace = viewerRefSpace;
 
@@ -154,14 +160,11 @@ export class ARManager {
   }
 
   setupEventListeners() {
-  this.sceneManager.renderer.xr.addEventListener('sessionstart', () => {
-    const session = this.sceneManager.renderer.xr.getSession();
-    if (session) {
+    this.sceneManager.renderer.xr.addEventListener('sessionstart', () => {
+      const session = this.sceneManager.renderer.xr.getSession();
       session.addEventListener('select', () => this.onSelect());
-    }
-  });
-}
-
+    });
+  }
 
   onSelect() {
     if (this.modelPlaced || !this.reticle.visible) return;
