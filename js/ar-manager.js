@@ -83,7 +83,10 @@ export class ARManager {
         domOverlay: { root: document.body },
       });
 
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+      await this.sceneManager.renderer.xr.setSession(session);
+      this.xrRefSpace = await session.requestReferenceSpace('local');
+      this.xrViewerSpace = await session.requestReferenceSpace('viewer');
+
 
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
 
