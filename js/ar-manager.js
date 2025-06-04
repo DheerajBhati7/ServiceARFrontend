@@ -84,8 +84,14 @@ export class ARManager {
     this.xrSession.addEventListener('select', () => this.onSelect());
 
     // Get a supported reference space for hit testing and rendering
-    this.viewerReferenceSpace = await getSupportedReferenceSpace(this.xrSession);
-    this.localReferenceSpace = this.viewerReferenceSpace; // Use same for hit test pose
+    this.localReferenceSpace = await getSupportedReferenceSpace(this.xrSession);
+
+    // For hit test source, use 'viewer' space if supported, else fallback to localReferenceSpace
+    try {
+      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+    } catch {
+      this.viewerReferenceSpace = this.localReferenceSpace;
+    }
 
     this.hitTestSource = await this.xrSession.requestHitTestSource({
       space: this.viewerReferenceSpace
@@ -132,6 +138,8 @@ export class ARManager {
   }
   throw new Error('No supported reference space found.');
 }
+
+  
 }
 
   endAR() {
