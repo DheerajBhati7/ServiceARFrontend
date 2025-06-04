@@ -67,6 +67,7 @@ export class ARManager {
 
   async startAR() {
     try {
+      // Request camera permission first
       await navigator.mediaDevices.getUserMedia({ video: true });
     } catch (err) {
       alert('Camera access is required for AR. Please grant permissions and try again.');
@@ -74,38 +75,51 @@ export class ARManager {
     }
 
     try {
-      // Use the same session configuration as the working WebXR sample
+      console.log('Starting AR session...');
+      
+      // Request AR session with minimal requirements
       this.xrSession = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test']
       });
 
-      // Important: Set the session on the renderer first
-      this.sceneManager.renderer.xr.setSession(this.xrSession);
+      console.log('AR session created successfully');
+
+      // IMPORTANT: Set the session on renderer immediately
+      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+      console.log('XR session set on renderer');
 
       // Set up event listeners
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
       this.xrSession.addEventListener('select', () => this.onSelect());
 
-      // Request reference spaces - use the exact same approach as the working sample
+      // Request reference spaces
       this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+      console.log('Viewer reference space obtained');
+      
       this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
+      console.log('Local reference space obtained');
 
       // Request hit test source
       this.hitTestSource = await this.xrSession.requestHitTestSource({
         space: this.viewerReferenceSpace
       });
+      console.log('Hit test source created');
 
+      // Update state
       this.isActive = true;
       this.uiManager.setARMode(true);
       this.sceneManager.setARMode(true);
 
+      // Hide the original model
       if (this.model) {
         this.model.scene.visible = false;
       }
 
+      // Reset placement state
       this.modelPlaced = false;
       this.reticle.visible = true;
 
+      // Clear any existing AR model
       if (this.arModel) {
         this.sceneManager.scene.remove(this.arModel);
         this.arModel = null;
@@ -114,81 +128,19 @@ export class ARManager {
       this.clearARHotspots();
 
       console.log('AR session started successfully');
+      
+      // Force a render to make sure everything is displaying
+      this.sceneManager.render();
+
     } catch (e) {
       console.error('Failed to start AR session:', e);
+      alert('Failed to start AR session: ' + e.message);
       
-      // Try fallback approach if the standard approach fails
-      if (e.message.includes('reference space') || e.message.includes('refrence space')) {
-        console.log('Trying fallback reference space approach...');
-        await this.startARFallback();
-      } else {
-        alert('Failed to start AR session: ' + e.message);
-      }
-    }
-  }
-
-  async startARFallback() {
-    try {
-      // End any existing session
+      // Clean up on failure
       if (this.xrSession) {
         this.xrSession.end();
         this.xrSession = null;
       }
-
-      // Try with minimal requirements - exactly like the working sample
-      this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test']
-      });
-
-      this.sceneManager.renderer.xr.setSession(this.xrSession);
-      
-      this.xrSession.addEventListener('end', () => this.onSessionEnd());
-      this.xrSession.addEventListener('select', () => this.onSelect());
-
-      // Try only viewer space first (most widely supported)
-      try {
-        this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
-        console.log('Got viewer reference space');
-      } catch (e) {
-        throw new Error('Cannot get viewer reference space: ' + e.message);
-      }
-
-      // Try local space, but don't fail if it's not available
-      try {
-        this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
-        console.log('Got local reference space');
-      } catch (e) {
-        console.warn('Local reference space not available, using viewer as fallback');
-        this.localReferenceSpace = this.viewerReferenceSpace;
-      }
-
-      // Request hit test source
-      this.hitTestSource = await this.xrSession.requestHitTestSource({
-        space: this.viewerReferenceSpace
-      });
-
-      this.isActive = true;
-      this.uiManager.setARMode(true);
-      this.sceneManager.setARMode(true);
-
-      if (this.model) {
-        this.model.scene.visible = false;
-      }
-
-      this.modelPlaced = false;
-      this.reticle.visible = true;
-
-      if (this.arModel) {
-        this.sceneManager.scene.remove(this.arModel);
-        this.arModel = null;
-      }
-
-      this.clearARHotspots();
-
-      console.log('AR session started with fallback approach');
-    } catch (e) {
-      console.error('Fallback AR session also failed:', e);
-      alert('AR is not supported on this device: ' + e.message);
     }
   }
 
@@ -199,17 +151,22 @@ export class ARManager {
   }
 
   onSessionEnd() {
+    console.log('AR session ended');
+    
     this.isActive = false;
     this.xrSession = null;
     this.uiManager.setARMode(false);
     this.sceneManager.setARMode(false);
 
+    // Show the original model
     if (this.model) {
       this.model.scene.visible = true;
     }
 
+    // Hide reticle
     this.reticle.visible = false;
 
+    // Remove AR model
     if (this.arModel) {
       this.sceneManager.scene.remove(this.arModel);
       this.arModel = null;
@@ -223,9 +180,16 @@ export class ARManager {
   }
 
   onSelect() {
-    if (this.modelPlaced || !this.reticle.visible) return;
+    console.log('AR select event triggered');
+    
+    if (this.modelPlaced || !this.reticle.visible) {
+      console.log('Model already placed or reticle not visible');
+      return;
+    }
 
     if (this.model) {
+      console.log('Placing AR model...');
+      
       this.arModel = this.model.scene.clone();
       this.arModel.position.setFromMatrixPosition(this.reticle.matrix);
       this.arModel.scale.set(0.5, 0.5, 0.5);
@@ -236,6 +200,8 @@ export class ARManager {
       this.modelPlaced = true;
       this.uiManager.hideARInstructions();
       this.reticle.visible = false;
+      
+      console.log('AR model placed successfully');
     }
   }
 
@@ -275,6 +241,7 @@ export class ARManager {
     const frame = this.sceneManager.renderer.xr.getFrame();
     if (!frame) return;
 
+    // Update hit testing for reticle placement
     if (!this.modelPlaced && this.hitTestSource && this.localReferenceSpace) {
       try {
         const hitTestResults = frame.getHitTestResults(this.hitTestSource);
