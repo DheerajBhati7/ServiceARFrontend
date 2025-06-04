@@ -73,10 +73,10 @@ export class ARManager {
 
     try {
       this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['local'],
-      });
-
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+        requiredFeatures: ['local', 'hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body },
+    });
 
       // ✅ Ensure WebGL is XR compatible and attach baseLayer
       const gl = this.sceneManager.renderer.getContext();
@@ -84,6 +84,8 @@ export class ARManager {
       this.xrSession.updateRenderState({
         baseLayer: new XRWebGLLayer(this.xrSession, gl),
       });
+
+      await this.sceneManager.renderer.xr.setSession(this.xrSession);
 
       // ✅ Request reference spaces
       this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
