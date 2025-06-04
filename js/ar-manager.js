@@ -73,7 +73,7 @@ export class ARManager {
 
     try {
       this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test', 'local'],
+        requiredFeatures: ['local'],
         optionalFeatures: ['dom-overlay'],
         domOverlay: { root: document.body },
       });
