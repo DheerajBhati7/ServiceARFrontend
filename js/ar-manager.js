@@ -87,23 +87,21 @@ export class ARManager {
       const gl = this.sceneManager.renderer.getContext();
       console.log('WebGL context retrieved:', gl);
 
-      // Fix: set session first
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
-      console.log('Session passed to Three.js renderer');
+      // 1. Make GL XR-compatible
+      await gl.makeXRCompatible();
+      console.log('GL made XR-compatible');
 
-      // Then make context XR-compatible
-      if (!gl.makeXRCompatible) {
-        console.warn('makeXRCompatible not available');
-      } else {
-        await gl.makeXRCompatible();
-        console.log('WebGL made XR-compatible');
-      }
-
+      // 2. Set XRWebGLLayer BEFORE setSession
       this.xrSession.updateRenderState({
         baseLayer: new XRWebGLLayer(this.xrSession, gl),
       });
       console.log('XRWebGLLayer set');
 
+      // 3. Set session AFTER render state is set
+      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+      console.log('Session passed to Three.js renderer');
+
+      // Reference spaces
       this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
       console.log('Got local reference space');
 
@@ -115,9 +113,11 @@ export class ARManager {
       });
       console.log('Hit test source created');
 
+      // Events
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
       this.xrSession.addEventListener('select', () => this.onSelect());
 
+      // Activate AR mode
       this.isActive = true;
       this.uiManager.setARMode(true);
       this.sceneManager.setARMode(true);
@@ -202,7 +202,7 @@ export class ARManager {
       this.arModel.add(sphere);
       this.arHotspots.push(sphere);
     });
-    console.log(`✨ Added ${this.arHotspots.length} hotspots to AR model`);
+    console.log(`Added ${this.arHotspots.length} hotspots to AR model`);
   }
 
   clearARHotspots() {
