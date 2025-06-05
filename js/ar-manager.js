@@ -76,63 +76,82 @@ export class ARManager {
       return;
     }
 
+    let session = null;
     try {
       console.log('Requesting XR session...');
-      this.xrSession = await navigator.xr.requestSession('immersive-ar', {
+      session = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test'],
-        optionalFeatures: ['local', 'dom-overlay'],
+        optionalFeatures: ['dom-overlay', 'local'],
         domOverlay: { root: document.body },
       });
-      console.log('XR session started:', this.xrSession);
+      console.log('XR session started:', session);
 
+      // Store session reference early for cleanup
+      this.xrSession = session;
+
+      // Setup reference spaces BEFORE setting session in renderer
+      console.log('Setting up reference spaces...');
+      
+      // Always start with viewer space as it's guaranteed to be supported
+      try {
+        this.viewerReferenceSpace = await session.requestReferenceSpace('viewer');
+        console.log('Got viewer reference space');
+      } catch (viewerErr) {
+        console.error('Critical error: viewer reference space not supported:', viewerErr);
+        throw new Error('This device does not support basic AR functionality');
+      }
+
+      // Try to get local reference space with fallback
+      try {
+        this.localReferenceSpace = await session.requestReferenceSpace('local');
+        console.log('Got local reference space');
+      } catch (localErr) {
+        console.warn('"local" reference space not supported, using viewer as fallback:', localErr.message);
+        this.localReferenceSpace = this.viewerReferenceSpace;
+      }
+
+      // Setup WebGL layer
       const gl = this.sceneManager.renderer.getContext();
-      console.log('WebGL context retrieved:', gl);
+      console.log('WebGL context retrieved');
 
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
-      console.log('Session set into renderer');
+      try {
+        await gl.makeXRCompatible();
+        console.log('WebGL made XR-compatible');
+      } catch (glError) {
+        console.error('WebGL XR compatibility failed:', glError);
+        throw new Error('Graphics hardware not compatible with AR');
+      }
 
-      await gl.makeXRCompatible();
-      console.log('WebGL made XR-compatible');
-
-      this.xrSession.updateRenderState({
-        baseLayer: new XRWebGLLayer(this.xrSession, gl),
+      session.updateRenderState({
+        baseLayer: new XRWebGLLayer(session, gl),
       });
       console.log('XRWebGLLayer set');
 
+      // Create hit test source
       try {
-        this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
-        console.log('Got local reference space');
-      } catch (err) {
-        console.warn('"local" reference space not supported, trying "viewer":', err);
-        try {
-          this.localReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
-          console.log('Fallback to viewer reference space');
-        } catch (fallbackErr) {
-          console.error('No valid reference space available:', fallbackErr);
-          alert('AR is not supported on this device.');
-          this.xrSession.end();
-          return;
-        }
-      }
-
-      try {
-        this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
-        console.log('Got viewer reference space');
-
-        this.hitTestSource = await this.xrSession.requestHitTestSource({
+        this.hitTestSource = await session.requestHitTestSource({
           space: this.viewerReferenceSpace,
         });
         console.log('Hit test source created');
-      } catch (err) {
-        console.error('Failed to acquire viewer reference space or hit test source:', err);
-        alert('AR is not supported on this device. Missing reference space.');
-        this.xrSession.end();
-        return;
+      } catch (hitTestError) {
+        console.error('Hit test source creation failed:', hitTestError);
+        throw new Error('AR tracking not available on this device');
       }
 
-      this.xrSession.addEventListener('end', () => this.onSessionEnd());
-      this.xrSession.addEventListener('select', () => this.onSelect());
+      // Set event listeners BEFORE setting session in renderer
+      session.addEventListener('end', () => this.onSessionEnd());
+      session.addEventListener('select', () => this.onSelect());
 
+      // NOW set the session in the renderer (after everything else is ready)
+      try {
+        await this.sceneManager.renderer.xr.setSession(session);
+        console.log('Session set into renderer');
+      } catch (rendererError) {
+        console.error('Renderer XR session setup failed:', rendererError);
+        throw new Error('Failed to initialize AR display');
+      }
+
+      // Activate AR mode
       this.isActive = true;
       this.uiManager.setARMode(true);
       this.sceneManager.setARMode(true);
@@ -146,14 +165,66 @@ export class ARManager {
       this.reticle.visible = true;
       this.modelPlaced = false;
       this.clearARHotspots();
+      
+      console.log('AR session successfully initialized');
+      
     } catch (e) {
-      console.error('Failed to start AR session:', e);
-      alert('Failed to start AR session: ' + (e?.message || e));
+      // Enhanced error logging
+      console.error('AR session failed:', {
+        name: e.name,
+        message: e.message,
+        code: e.code,
+        stack: e.stack
+      });
+      
+      // User-friendly error messages based on error type
+      let userMessage = 'Failed to start AR session';
+      if (e.name === 'NotSupportedError') {
+        userMessage = 'AR is not supported on this device or browser';
+      } else if (e.name === 'SecurityError') {
+        userMessage = 'Camera permissions are required for AR';
+      } else if (e.name === 'InvalidStateError') {
+        userMessage = 'AR session is already active or device is busy';
+      } else if (e.message) {
+        userMessage = e.message;
+      }
+      
+      alert(userMessage);
+      
+      // Comprehensive cleanup
+      await this.cleanupFailedSession(session);
     }
   }
 
+  async cleanupFailedSession(session) {
+    console.log('Cleaning up failed AR session...');
+    
+    // Clean up session
+    if (session && session.end) {
+      try {
+        await session.end();
+      } catch (endError) {
+        console.warn('Error ending failed session:', endError);
+      }
+    }
+    
+    // Reset renderer XR state
+    if (this.sceneManager.renderer.xr) {
+      try {
+        this.sceneManager.renderer.xr.setSession(null);
+      } catch (resetError) {
+        console.warn('Error resetting renderer XR:', resetError);
+      }
+    }
+    
+    // Reset all AR state
+    this.onSessionEnd();
+  }
+
   endAR() {
-    if (this.xrSession) this.xrSession.end();
+    if (this.xrSession) {
+      this.xrSession.end();
+    }
   }
 
   onSessionEnd() {
