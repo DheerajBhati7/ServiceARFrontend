@@ -80,7 +80,7 @@ export class ARManager {
       console.log('Requesting XR session...');
       this.xrSession = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay', 'local'],
+        optionalFeatures: ['local', 'dom-overlay'],
         domOverlay: { root: document.body },
       });
       console.log('XR session started:', this.xrSession);
@@ -103,24 +103,32 @@ export class ARManager {
         this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
         console.log('Got local reference space');
       } catch (err) {
-        console.warn('"local" reference space not supported, falling back to "viewer":', err);
+        console.warn('"local" reference space not supported, trying "viewer":', err);
         try {
           this.localReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
           console.log('Fallback to viewer reference space');
         } catch (fallbackErr) {
           console.error('No valid reference space available:', fallbackErr);
           alert('AR is not supported on this device.');
+          this.xrSession.end();
           return;
         }
       }
 
-      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
-      console.log('Got viewer reference space');
+      try {
+        this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+        console.log('Got viewer reference space');
 
-      this.hitTestSource = await this.xrSession.requestHitTestSource({
-        space: this.viewerReferenceSpace,
-      });
-      console.log('Hit test source created');
+        this.hitTestSource = await this.xrSession.requestHitTestSource({
+          space: this.viewerReferenceSpace,
+        });
+        console.log('Hit test source created');
+      } catch (err) {
+        console.error('Failed to acquire viewer reference space or hit test source:', err);
+        alert('AR is not supported on this device. Missing reference space.');
+        this.xrSession.end();
+        return;
+      }
 
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
       this.xrSession.addEventListener('select', () => this.onSelect());
