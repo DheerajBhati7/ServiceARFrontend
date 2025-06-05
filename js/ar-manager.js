@@ -87,19 +87,19 @@ export class ARManager {
       const gl = this.sceneManager.renderer.getContext();
       console.log('WebGL context retrieved:', gl);
 
-      // 1. Make GL XR-compatible
+      // 1. Set session into renderer first (Three.js quirk)
+      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+      console.log('Session set into renderer');
+
+      // 2. Then make GL XR-compatible
       await gl.makeXRCompatible();
       console.log('GL made XR-compatible');
 
-      // 2. Set XRWebGLLayer BEFORE setSession
+      // 3. Now safely set render state with XRWebGLLayer
       this.xrSession.updateRenderState({
         baseLayer: new XRWebGLLayer(this.xrSession, gl),
       });
-      console.log('XRWebGLLayer set');
-
-      // 3. Set session AFTER render state is set
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
-      console.log('Session passed to Three.js renderer');
+      console.log('RenderState updated with XRWebGLLayer');
 
       // Reference spaces
       this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
