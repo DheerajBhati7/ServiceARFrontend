@@ -4,6 +4,7 @@ export class ARManager {
   constructor(sceneManager, uiManager) {
     this.sceneManager = sceneManager;
     this.uiManager = uiManager;
+
     if (!this.sceneManager.scene) {
       throw new Error('SceneManager must be initialized before creating ARManager');
     }
@@ -78,8 +79,8 @@ export class ARManager {
     try {
       console.log('Requesting XR session...');
       this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['local', 'hit-test'],
-        optionalFeatures: ['dom-overlay'],
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay', 'local'],
         domOverlay: { root: document.body },
       });
       console.log('XR session started:', this.xrSession);
@@ -87,23 +88,31 @@ export class ARManager {
       const gl = this.sceneManager.renderer.getContext();
       console.log('WebGL context retrieved:', gl);
 
-      // 1. Make GL XR-compatible
-      await gl.makeXRCompatible();
-      console.log('GL made XR-compatible');
+      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+      console.log('Session set into renderer');
 
-      // 2. Set XRWebGLLayer BEFORE setSession
+      await gl.makeXRCompatible();
+      console.log('WebGL made XR-compatible');
+
       this.xrSession.updateRenderState({
         baseLayer: new XRWebGLLayer(this.xrSession, gl),
       });
       console.log('XRWebGLLayer set');
 
-      // 3. Set session AFTER render state is set
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
-      console.log('Session passed to Three.js renderer');
-
-      // Reference spaces
-      this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
-      console.log('Got local reference space');
+      try {
+        this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
+        console.log('Got local reference space');
+      } catch (err) {
+        console.warn('"local" reference space not supported, falling back to "viewer":', err);
+        try {
+          this.localReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+          console.log('Fallback to viewer reference space');
+        } catch (fallbackErr) {
+          console.error('No valid reference space available:', fallbackErr);
+          alert('AR is not supported on this device.');
+          return;
+        }
+      }
 
       this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
       console.log('Got viewer reference space');
@@ -113,11 +122,9 @@ export class ARManager {
       });
       console.log('Hit test source created');
 
-      // Events
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
       this.xrSession.addEventListener('select', () => this.onSelect());
 
-      // Activate AR mode
       this.isActive = true;
       this.uiManager.setARMode(true);
       this.sceneManager.setARMode(true);
@@ -131,7 +138,6 @@ export class ARManager {
       this.reticle.visible = true;
       this.modelPlaced = false;
       this.clearARHotspots();
-
     } catch (e) {
       console.error('Failed to start AR session:', e);
       alert('Failed to start AR session: ' + (e?.message || e));
