@@ -33,9 +33,15 @@
     <div id="videoLinks"></div>
   </div>
   <div id="tooltip"></div>
+
+  <!-- Camera Video Background -->
   <video id="cameraFeed" autoplay playsinline style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0;"></video>
 
-  <!-- Main Script -->
+  <!-- Main JS App -->
   <script type="module" src="js/main.js"></script>
+
+  <!-- Eruda Debugger (always enabled) -->
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+  <script>eruda.init();</script>
 </body>
 </html>

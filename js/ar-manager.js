@@ -7,6 +7,7 @@ export class ARManager {
     if (!this.sceneManager.scene) {
       throw new Error('SceneManager must be initialized before creating ARManager');
     }
+
     this.isActive = false;
     this.reticle = null;
     this.hitTestSource = null;
@@ -24,10 +25,7 @@ export class ARManager {
 
   createReticle() {
     const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      side: THREE.DoubleSide,
-    });
+    const material = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     this.reticle = new THREE.Mesh(geometry, material);
     this.reticle.visible = false;
     this.reticle.matrixAutoUpdate = false;
@@ -40,7 +38,10 @@ export class ARManager {
 
     if ('xr' in navigator) {
       try {
+        console.log('Checking immersive-ar support...');
         const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
+        console.log('immersive-ar support:', isSupported);
+
         if (isSupported) {
           this.uiManager.showARButton();
           this.setupARButton();
@@ -48,7 +49,7 @@ export class ARManager {
           this.uiManager.showARError('AR Not Supported');
         }
       } catch (e) {
-        console.error('AR support check failed:', e);
+        console.error('Error checking XR support:', e);
         this.uiManager.showARError('AR Not Supported');
       }
     } else {
@@ -65,42 +66,56 @@ export class ARManager {
 
   async startAR() {
     try {
+      console.log('Requesting camera access...');
       await navigator.mediaDevices.getUserMedia({ video: true });
+      console.log('Camera access granted');
     } catch (err) {
       alert('Camera access is required for AR. Please grant camera permissions and try again.');
+      console.error('Camera access failed:', err);
       return;
     }
 
     try {
+      console.log('Requesting XR session...');
       this.xrSession = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['local', 'hit-test'],
         optionalFeatures: ['dom-overlay'],
         domOverlay: { root: document.body },
-    });
+      });
+      console.log('XR session started:', this.xrSession);
 
-      // ✅ Ensure WebGL is XR compatible and attach baseLayer
       const gl = this.sceneManager.renderer.getContext();
-      await gl.makeXRCompatible();
+      console.log('WebGL context retrieved:', gl);
+
+      if (!gl.makeXRCompatible) {
+        console.warn('makeXRCompatible not available');
+      } else {
+        await gl.makeXRCompatible();
+        console.log('WebGL made XR-compatible');
+      }
+
       this.xrSession.updateRenderState({
         baseLayer: new XRWebGLLayer(this.xrSession, gl),
       });
+      console.log('XRWebGLLayer set');
 
       await this.sceneManager.renderer.xr.setSession(this.xrSession);
+      console.log('Session passed to Three.js renderer');
 
-      // ✅ Request reference spaces
       this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
-      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+      console.log('Got local reference space');
 
-      // ✅ Set up hit test source
+      this.viewerReferenceSpace = await this.xrSession.requestReferenceSpace('viewer');
+      console.log('Got viewer reference space');
+
       this.hitTestSource = await this.xrSession.requestHitTestSource({
         space: this.viewerReferenceSpace,
       });
+      console.log('Hit test source created');
 
-      // ✅ Event listeners
       this.xrSession.addEventListener('end', () => this.onSessionEnd());
       this.xrSession.addEventListener('select', () => this.onSelect());
 
-      // ✅ AR session ready
       this.isActive = true;
       this.uiManager.setARMode(true);
       this.sceneManager.setARMode(true);
@@ -114,9 +129,10 @@ export class ARManager {
       this.reticle.visible = true;
       this.modelPlaced = false;
       this.clearARHotspots();
+
     } catch (e) {
       console.error('Failed to start AR session:', e);
-      alert('Failed to start AR session: ' + e.message);
+      alert('Failed to start AR session: ' + (e?.message || e));
     }
   }
 
@@ -125,6 +141,7 @@ export class ARManager {
   }
 
   onSessionEnd() {
+    console.log('XR session ended');
     this.isActive = false;
     this.xrSession = null;
     this.uiManager.setARMode(false);
@@ -159,6 +176,8 @@ export class ARManager {
       this.modelPlaced = true;
       this.uiManager.hideARInstructions();
       this.reticle.visible = false;
+
+      console.log('📦 AR model placed');
     }
   }
 
@@ -181,6 +200,7 @@ export class ARManager {
       this.arModel.add(sphere);
       this.arHotspots.push(sphere);
     });
+    console.log(`✨ Added ${this.arHotspots.length} hotspots to AR model`);
   }
 
   clearARHotspots() {
