@@ -87,6 +87,11 @@ export class ARManager {
       const gl = this.sceneManager.renderer.getContext();
       console.log('WebGL context retrieved:', gl);
 
+      // Fix: set session first
+      await this.sceneManager.renderer.xr.setSession(this.xrSession);
+      console.log('Session passed to Three.js renderer');
+
+      // Then make context XR-compatible
       if (!gl.makeXRCompatible) {
         console.warn('makeXRCompatible not available');
       } else {
@@ -98,9 +103,6 @@ export class ARManager {
         baseLayer: new XRWebGLLayer(this.xrSession, gl),
       });
       console.log('XRWebGLLayer set');
-
-      await this.sceneManager.renderer.xr.setSession(this.xrSession);
-      console.log('Session passed to Three.js renderer');
 
       this.localReferenceSpace = await this.xrSession.requestReferenceSpace('local');
       console.log('Got local reference space');
@@ -177,7 +179,7 @@ export class ARManager {
       this.uiManager.hideARInstructions();
       this.reticle.visible = false;
 
-      console.log('📦 AR model placed');
+      console.log('AR model placed');
     }
   }
 
