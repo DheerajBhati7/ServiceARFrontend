@@ -146,36 +146,38 @@ export class SceneManager {
   }
 
   setARMode(enabled) {
-    this.isARMode = enabled;
+  this.isARMode = enabled;
 
-    if (enabled) {
-      this.scene.background = null;
-      this.scene.fog = null;
-      this.scene.environment = null;
+  if (enabled) {
+    this.renderer.xr.enabled = true;
+    this.scene.background = null;
+    this.scene.fog = null;
+    this.scene.environment = null;
+    this.hideHelpers();
+    this.renderer.setClearColor(0x000000, 0); // transparent
+    this.renderer.autoClear = false;
 
-      this.hideHelpers();
+    if (this.controls) {
+      this.controls.enabled = false;
+    }
+  } else {
+    this.renderer.xr.enabled = false;
+    this.scene.background = new THREE.Color(0xf5f5f5);
+    this.scene.fog = new THREE.Fog(0xf5f5f5, 10, 50);
 
-      this.lights.ambient.intensity = 0.8;
-      this.lights.main.intensity = 0.5;
+    const env = this.pmremGenerator.fromScene(
+      new RoomEnvironment(),
+      0.04
+    ).texture;
+    this.scene.environment = env;
 
-      this.renderer.setClearColor(0x000000, 0); // Transparent
-      this.renderer.autoClear = false;
-    } else {
-      this.scene.background = new THREE.Color(0xf5f5f5);
-      this.scene.fog = new THREE.Fog(0xf5f5f5, 10, 50);
+    this.showHelpers();
+    this.renderer.setClearColor(0xf5f5f5, 1);
+    this.renderer.autoClear = true;
 
-      this.scene.environment = this.pmremGenerator.fromScene(
-        new RoomEnvironment(),
-        0.04
-      ).texture;
-
-      this.showHelpers();
-
-      this.lights.ambient.intensity = 0.4;
-      this.lights.main.intensity = 1;
-
-      this.renderer.setClearColor(0xf5f5f5, 1);
-      this.renderer.autoClear = true;
+    if (this.controls) {
+      this.controls.enabled = true;
     }
   }
+}
 }
