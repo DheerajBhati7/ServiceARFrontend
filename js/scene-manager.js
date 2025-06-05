@@ -155,7 +155,7 @@ export class SceneManager {
     this.scene.environment = null;
     this.hideHelpers();
     this.renderer.setClearColor(0x000000, 0); // transparent
-    this.renderer.autoClear = false;
+    this.renderer.autoClear = true;
 
     if (this.controls) {
       this.controls.enabled = false;
