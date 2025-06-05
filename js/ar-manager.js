@@ -78,6 +78,10 @@ export class ARManager {
 
     let session = null;
     try {
+      // Enable XR on renderer first
+      console.log('Enabling XR on renderer...');
+      this.sceneManager.renderer.xr.enabled = true;
+      
       console.log('Requesting XR session...');
       session = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test'],
@@ -89,7 +93,28 @@ export class ARManager {
       // Store session reference early for cleanup
       this.xrSession = session;
 
-      // Setup reference spaces BEFORE setting session in renderer
+      // Set event listeners FIRST (before any other setup)
+      session.addEventListener('end', () => this.onSessionEnd());
+      session.addEventListener('select', () => this.onSelect());
+
+      // Setup WebGL layer early
+      const gl = this.sceneManager.renderer.getContext();
+      console.log('WebGL context retrieved');
+
+      try {
+        await gl.makeXRCompatible();
+        console.log('WebGL made XR-compatible');
+      } catch (glError) {
+        console.error('WebGL XR compatibility failed:', glError);
+        throw new Error('Graphics hardware not compatible with AR');
+      }
+
+      session.updateRenderState({
+        baseLayer: new XRWebGLLayer(session, gl),
+      });
+      console.log('XRWebGLLayer set');
+
+      // Setup reference spaces
       console.log('Setting up reference spaces...');
       
       // Always start with viewer space as it's guaranteed to be supported
@@ -110,23 +135,6 @@ export class ARManager {
         this.localReferenceSpace = this.viewerReferenceSpace;
       }
 
-      // Setup WebGL layer
-      const gl = this.sceneManager.renderer.getContext();
-      console.log('WebGL context retrieved');
-
-      try {
-        await gl.makeXRCompatible();
-        console.log('WebGL made XR-compatible');
-      } catch (glError) {
-        console.error('WebGL XR compatibility failed:', glError);
-        throw new Error('Graphics hardware not compatible with AR');
-      }
-
-      session.updateRenderState({
-        baseLayer: new XRWebGLLayer(session, gl),
-      });
-      console.log('XRWebGLLayer set');
-
       // Create hit test source
       try {
         this.hitTestSource = await session.requestHitTestSource({
@@ -138,14 +146,22 @@ export class ARManager {
         throw new Error('AR tracking not available on this device');
       }
 
-      // Set event listeners BEFORE setting session in renderer
-      session.addEventListener('end', () => this.onSessionEnd());
-      session.addEventListener('select', () => this.onSelect());
-
-      // NOW set the session in the renderer (after everything else is ready)
+      // Set the session in the renderer using a more direct approach
       try {
-        await this.sceneManager.renderer.xr.setSession(session);
+        console.log('Setting session in renderer...');
+        
+        // Set session directly without awaiting
+        this.sceneManager.renderer.xr.setSession(session);
         console.log('Session set into renderer');
+        
+        // Wait for next frame to ensure session is properly initialized
+        await new Promise(resolve => {
+          session.requestAnimationFrame(() => {
+            console.log('First animation frame received');
+            resolve();
+          });
+        });
+        
       } catch (rendererError) {
         console.error('Renderer XR session setup failed:', rendererError);
         throw new Error('Failed to initialize AR display');
@@ -199,8 +215,23 @@ export class ARManager {
   async cleanupFailedSession(session) {
     console.log('Cleaning up failed AR session...');
     
+    // Reset renderer XR state first
+    if (this.sceneManager.renderer.xr) {
+      try {
+        // Disable XR rendering
+        this.sceneManager.renderer.xr.enabled = false;
+        
+        // Clear the session if it exists
+        if (this.sceneManager.renderer.xr.getSession()) {
+          this.sceneManager.renderer.xr.setSession(null);
+        }
+      } catch (resetError) {
+        console.warn('Error resetting renderer XR:', resetError);
+      }
+    }
+    
     // Clean up session
-    if (session && session.end) {
+    if (session && session.end && typeof session.end === 'function') {
       try {
         await session.end();
       } catch (endError) {
@@ -208,17 +239,39 @@ export class ARManager {
       }
     }
     
-    // Reset renderer XR state
-    if (this.sceneManager.renderer.xr) {
-      try {
-        this.sceneManager.renderer.xr.setSession(null);
-      } catch (resetError) {
-        console.warn('Error resetting renderer XR:', resetError);
-      }
-    }
-    
     // Reset all AR state
     this.onSessionEnd();
+  }
+
+  onSessionEnd() {
+    console.log('XR session ended');
+    this.isActive = false;
+    
+    // Clear session reference first
+    this.xrSession = null;
+    
+    // Reset UI and scene states
+    this.uiManager.setARMode(false);
+    this.sceneManager.setARMode(false);
+
+    // Reset renderer XR state
+    if (this.sceneManager.renderer.xr) {
+      this.sceneManager.renderer.xr.enabled = false;
+    }
+
+    if (this.model) this.model.scene.visible = true;
+    this.reticle.visible = false;
+
+    if (this.arModel) {
+      this.sceneManager.scene.remove(this.arModel);
+      this.arModel = null;
+    }
+
+    this.clearARHotspots();
+    this.hitTestSource = null;
+    this.modelPlaced = false;
+    this.viewerReferenceSpace = null;
+    this.localReferenceSpace = null;
   }
 
   endAR() {
